@@ -1,5 +1,19 @@
+import numpy as np
 
 
+# subhalos
+def retr_factmcutfromdefs(gdat, adissour, adishost, adishostsour, asca, acut):
+    
+    mdencrit = retr_mdencrit(gdat, adissour, adishost, adishostsour)
+    
+    fracacutasca = acut / asca
+    
+    factmcutfromdefs = np.pi * adishost**2 * mdencrit * asca * retr_mcutfrommscl(fracacutasca)
+
+    return factmcutfromdefs
+
+
+# lensing
 def retr_mdencrit(gdat, adissour, adishost, adishostsour):
     
     mdencrit = gdat.factnewtlght / 4. / np.pi * adissour / adishostsour / adishost
@@ -13,33 +27,6 @@ def retr_massfrombein(gdat, adissour, adishost, adishostsour):
     massfrombein = np.pi * adishost**2 * mdencrit
 
     return massfrombein
-
-
-def retr_factmcutfromdefs(gdat, adissour, adishost, adishostsour, asca, acut):
-    
-    mdencrit = retr_mdencrit(gdat, adissour, adishost, adishostsour)
-    
-    fracacutasca = acut / asca
-    
-    factmcutfromdefs = np.pi * adishost**2 * mdencrit * asca * retr_mcutfrommscl(fracacutasca)
-
-    return factmcutfromdefs
-
-
-def retr_mcut(gdat, defs, asca, acut, adishost, mdencrit):
-    
-    mscl = defs * np.pi * adishost**2 * mdencrit * asca
-    fracacutasca = acut / asca
-    mcut = mscl * retr_mcutfrommscl(fracacutasca)
-    
-    return mcut
-
-
-def retr_mcutfrommscl(fracacutasca):
-    
-    mcut = fracacutasca**2 / (fracacutasca**2 + 1.)**2 * ((fracacutasca**2 - 1.) * np.log(fracacutasca) + fracacutasca * np.pi - (fracacutasca**2 + 1.))
-
-    return mcut
 
 
 def retr_defl(gdat, indxpixlelem, lgal, bgal, angllens, ellp=None, angl=None, rcor=None, asca=None, acut=None):
