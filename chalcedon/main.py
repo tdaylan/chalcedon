@@ -1,7 +1,8 @@
 import numpy as np
 
 import tdpy
-
+import aspendos
+from tdpy import summgene
 
 def retr_factmcutfromdefs(adissour, adislens, adislenssour, asca, acut):
     
@@ -9,7 +10,7 @@ def retr_factmcutfromdefs(adissour, adislens, adislenssour, asca, acut):
     
     fracacutasca = acut / asca
     
-    factmcutfromdefs = np.pi * adislens**2 * mdencrit * asca * retr_mcutfrommscl(fracacutasca)
+    factmcutfromdefs = np.pi * adislens**2 * mdencrit * asca * aspendos.retr_mcutfrommscl(fracacutasca)
 
     return factmcutfromdefs
 
@@ -72,6 +73,9 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, xpos, ypos, angllens, ellp=None,
     xpostran = xposgrid[indxpixlelem] - xpos
     ypostran = yposgrid[indxpixlelem] - ypos
     
+    if ellp is not None and (ellp < 0. or ellp > 1.):
+        raise Exception('')
+
     if acut is not None:
         defs = angllens
         angl = np.sqrt(xpostran**2 + ypostran**2)
@@ -89,6 +93,7 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, xpos, ypos, angllens, ellp=None,
         axisrati = 1. - ellp
         facteccc = np.sqrt(1. - axisrati**2)
         factrcor = np.sqrt(axisrati**2 * xposrttr**2 + yposrttr**2)
+        
         deflxposrttr = bein * axisrati / facteccc *  np.arctan(facteccc * xposrttr / factrcor)
         deflyposrttr = bein * axisrati / facteccc * np.arctanh(facteccc * yposrttr / factrcor)
         
