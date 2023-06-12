@@ -4,6 +4,8 @@ import tdpy
 import aspendos
 from tdpy import summgene
 
+
+
 def retr_angleinscosm(masslens, distlenssour, distlens, distsour):
     '''
     Return Einstein radius for a cosmological source and lens.
@@ -12,6 +14,16 @@ def retr_angleinscosm(masslens, distlenssour, distlens, distsour):
     angleins = np.sqrt(masslens / 10**(11.09) * distlenssour / distlens / distsour)
     
     return angleins
+
+
+def retr_radieinstinft(dispvelo):
+    '''
+    Return Einstein radius for a source at infinity
+    '''
+    
+    radieinstinft = 4 * np.pi * (dispvelo / 3e5)**2 / np.pi * 180. * 3600. # [arcsec]
+    
+    return radieinstinft
 
 
 def retr_amplslen( \
