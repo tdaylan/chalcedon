@@ -6,6 +6,18 @@ from tdpy import summgene
 
 
 
+def retr_dflxslensing(time, epocslen, amplslen, duratrantotl):
+    '''
+    Return the self-lensing signature
+    '''    
+    
+    timediff = time - epocslen
+    
+    dflxslensing = 1e-3 * amplslen * np.heaviside(duratrantotl / 48. + timediff, 0.5) * np.heaviside(duratrantotl / 48. - timediff, 0.5)
+    
+    return dflxslensing
+
+
 def retr_angleinscosm(masslens, distlenssour, distlens, distsour):
     '''
     Return Einstein radius for a cosmological source and lens.
