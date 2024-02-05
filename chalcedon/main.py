@@ -175,7 +175,8 @@ def eval_modl( \
               ):
     
     if dictmodl is not None:
-        
+        pass
+
     initchro(gdat, gdatmodi, 'elem')
 
     # grab the sample vector
