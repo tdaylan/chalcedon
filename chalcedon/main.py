@@ -1,5 +1,7 @@
 import numpy as np
 
+import time as modutime
+
 import tdpy
 import aspendos
 from tdpy import summgene
@@ -105,6 +107,9 @@ def retr_ratimassbeinsqrd(adissour, adislens, adislenssour):
 
 
 def retr_deflcutf(angl, defs, asca, acut, asym=False):
+    '''
+    Return deflection due to a subhalo with a cutoff radius
+    '''
 
     fracanglasca = angl / asca
     
@@ -131,7 +136,10 @@ def retr_deflcutf(angl, defs, asca, acut, asym=False):
 
 
 def retr_defl(xposgrid, yposgrid, indxpixlelem, xpos, ypos, angllens, ellp=None, angl=None, rcor=None, asca=None, acut=None):
-    
+    '''
+    Return deflection due to a halo without a cutoff radius
+    '''
+
     # translate the grid
     xpostran = xposgrid[indxpixlelem] - xpos
     ypostran = yposgrid[indxpixlelem] - ypos
@@ -169,344 +177,166 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, xpos, ypos, angllens, ellp=None,
     return defl
 
 
-def eval_modl( \
-              dictmodl=None, \
-              gdat=None, gdatmodi=None, strgstat=None, strgmodl=None, boolcalcpsfnconv=None, boolcalcpsfnintp=None, \
-              ):
+def eval_emislens( \
+                  # input dictionary
+                  dictchalinpt=None, \
+                  
+                  # Boolean flag to turn on diagnostic mode
+                  booldiag=True, \
+                 ):
     
-    if dictmodl is not None:
+    '''
+    Calculate the emission due to graviationally lensed-sources background sources
+    '''
+    timeinit = modutime.time()
+    
+    # construct global object
+    gdat = tdpy.gdatstrt()
+    
+    # copy locals (inputs) to the global object
+    dictinpt = dict(locals())
+    for attr, valu in dictinpt.items():
+        if '__' not in attr and attr != 'gdat':
+            setattr(gdat, attr, valu)
+
+    if dictchalinpt is not None:
         pass
+    
+    # output dictionary
+    dictchaloutp = dict()
+    
+    #objttimeprof = tdpt.retr_objttimeprof('emislens')
 
-    initchro(gdat, gdatmodi, 'elem')
-
+    #objttimeprof.initchro(gdat, gdatmodi, 'elem')
     # grab the sample vector
-    indxpara = np.arange(gmodstat.paragenrscalfull.size) 
-
-    if gmod.numbpopl > 0:
-        
-        # temp -- this may slow down execution
-        gmodstat.indxparagenrelemfull = retr_indxparagenrelemfull(gdat, gmodstat.indxelemfull, strgmodl)
-        
-        # check if all active generative parameters are finite
-        if gdat.booldiag:
-            indxparatemp = []
-            for l in gmod.indxpopl:
-                indxparatemp.append(gmodstat.indxparagenrelemfull[l]['full'])
-            indxparatemp.append(gmod.indxpara.genrbase)
-            gmodstat.indxpara.genrfull = np.concatenate(indxparatemp)
-            if not np.isfinite(gmodstat.paragenrscalfull[gmodstat.indxpara.genrfull]).all():
-                raise Exception('')
-
-        gmodstat.numbelem = np.empty(gmod.numbpopl, dtype=int)
-        indxelem = [[] for l in gmod.indxpopl]
-        for l in gmod.indxpopl:
-            gmodstat.numbelem[l] = gmodstat.paragenrscalfull[gmod.indxpara.numbelem[l]].astype(int)
-            indxelem[l] = np.arange(gmodstat.numbelem[l])
-            gmodstat.numbelem[l] = np.sum(gmodstat.numbelem[l])
-        
-        gmodstat.numbelemtotl = np.sum(gmodstat.numbelem) 
-
-        gmodstat.dictelem = [[] for l in gmod.indxpopl]
-        for l in gmod.indxpopl:
-            gmodstat.dictelem[l] = dict()
-            for strgfeat in gmod.namepara.genrelemdefa:
-                gmodstat.dictelem[l][strgfeat] = []
-            for nameparagenrelem in gmod.namepara.genrelem[l]:
-                gmodstat.dictelem[l][nameparagenrelem] = gmodstat.paragenrscalfull[gmodstat.indxparagenrelemfull[l][nameparagenrelem]]
-                if gdat.booldiag:
-                    if ((abs(gmodstat.paragenrscalfull[gmodstat.indxparagenrelemfull[l][nameparagenrelem]]) < 1e-100 ) & \
-                        (abs(gmodstat.paragenrscalfull[gmodstat.indxparagenrelemfull[l][nameparagenrelem]]) > 0.)).any():
-                        raise Exception('')
-
-                    if gmodstat.numbelem[l] != len(gmodstat.dictelem[l][nameparagenrelem]):
-                        print('l')
-                        print(l)
-                        print('gmodstat.numbelem[l]')
-                        print(gmodstat.numbelem[l])
-                        print('gmodstat.dictelem[l]')
-                        print(gmodstat.dictelem[l])
-                        print('gmodstat.dictelem[l][nameparagenrelem]')
-                        print(gmodstat.dictelem[l][nameparagenrelem])
-                        print('nameparagenrelem')
-                        print(nameparagenrelem)
-                        raise Exception('')
+    #indxpara = np.arange(paragenr.size) 
     
-        if gdat.boolbinsener:
-            if gdat.typeverb > 1:
-                print('Calculating element spectra...')
-            initchro(gdat, gdatmodi, 'spec')
-            for l in gmod.indxpopl:
-                if gmod.typeelem[l].startswith('lght'):
-                    for strgfeat in gmod.namepara.genrelem[l]:
-                        sindcolr = [gmodstat.dictelem[l]['sindcolr%04d' % i] for i in gdat.indxenerinde]
-                        gmodstat.dictelem[l]['spec'] = retr_spec(gdat, gmodstat.dictelem[l]['flux'], \
-                                                    sind=gmodstat.dictelem[l]['sind'], curv=gmodstat.dictelem[l]['curv'], \
-                                                    expc=gmodstat.dictelem[l]['expc'], sindcolr=sindcolr, spectype=gmod.spectype[l])
-                        if gmod.typeelem[l].startswith('lghtline'):
-                            if gmod.typeelem[l] == 'lghtlinevoig':
-                                gmodstat.dictelem[l]['spec'] = retr_spec(gdat, gmodstat.dictelem[l]['flux'], \
-                                                                                elin=gmodstat.dictelem[l]['elin'], sigm=gmodstat.dictelem[l]['sigm'], \
-                                                                                gamm=gmodstat.dictelem[l]['gamm'], spectype=gmod.spectype[l])
-                            else:
-                                gmodstat.dictelem[l]['spec'] = retr_spec(gdat, gmodstat.dictelem[l]['flux'], elin=gmodstat.dictelem[l]['elin'], \
-                                                                                                edisintp=gdat.edisintp, spectype=gmod.spectype[l])
-
-            stopchro(gdat, gdatmodi, 'spec')
-        
-        if gdat.booldiag:
-            for l in gmod.indxpopl:
-                for g, nameparagenrelem in enumerate(gmod.namepara.genrelem[l]):
-                    if (gmod.scalpara.genrelem[l][g] != 'gaus' and not gmod.scalpara.genrelem[l][g].startswith('lnor')) and  \
-                       (gmod.scalpara.genrelem[l][g] != 'expo' and (gmodstat.dictelem[l][nameparagenrelem] < getattr(gmod.minmpara, nameparagenrelem)).any()) or \
-                                        (gmodstat.dictelem[l][nameparagenrelem] > getattr(gmod.maxmpara, nameparagenrelem)).any():
-                        
-                        print('')
-                        print('')
-                        print('')
-                        print('l, g')
-                        print(l, g)
-                        print('nameparagenrelem')
-                        print(nameparagenrelem)
-                        print('gmodstat.dictelem[l][nameparagenrelem]')
-                        summgene(gmodstat.dictelem[l][nameparagenrelem])
-                        print('getattr(gmod, minm + nameparagenrelem)')
-                        print(getattr(gmod.minmpara, nameparagenrelem))
-                        print('getattr(gmod, maxm + nameparagenrelem)')
-                        print(getattr(gmod.maxmpara, nameparagenrelem))
-                        print('gmod.scalpara.genrelem[l][g]')
-                        print(gmod.scalpara.genrelem[l][g])
-                        raise Exception('')
-           
-            for l in gmod.indxpopl:
-                if gmod.typeelem[l] == 'lens':
-                    if gdat.variasca:
-                        indx = np.where(gmodstat.paragenrscalfull[gmodstat.indxparagenrelemfull[l]['acut']] < 0.)[0]
-                        if indx.size > 0:
-                            raise Exception('')
-                    if gdat.variacut:
-                        indx = np.where(gmodstat.paragenrscalfull[gmodstat.indxparagenrelemfull[l]['asca']] < 0.)[0]
-                        if indx.size > 0:
-                            raise Exception('')
+    numbpopl = 1
     
-        # calculate element spectra
-        for l in gmod.indxpopl:
-            if gmod.typeelem[l].startswith('lght'):
-                    
-                # evaluate horizontal and vertical position for elements whose position is a power law in image-centric radius
-                if gmod.typespatdist[l] == 'glc3':
-                    gmodstat.dictelem[l]['dlos'], gmodstat.dictelem[l]['xpos'], gmodstat.dictelem[l]['ypos'] = retr_glc3(gmodstat.dictelem[l]['dglc'], \
-                                                                                                        gmodstat.dictelem[l]['thet'], gmodstat.dictelem[l]['phii'])
-                
-                if gmod.typespatdist[l] == 'gangexpo':
-                    gmodstat.dictelem[l]['xpos'], gmodstat.dictelem[l]['ypos'], = retr_xposypos(gmodstat.dictelem[l]['gang'], \
-                                                                                                        gmodstat.dictelem[l]['aang'])
-                    
-                    if gdat.booldiag:
-                        if gmodstat.numbelem[l] > 0:
-                            if np.amin(gmodstat.dictelem[l]['xpos']) < gmod.minmxpos or \
-                               np.amax(gmodstat.dictelem[l]['xpos']) > gmod.maxmxpos or \
-                               np.amin(gmodstat.dictelem[l]['ypos']) < gmod.minmypos or \
-                               np.amax(gmodstat.dictelem[l]['ypos']) > gmod.maxmypos:
-                                raise Exception('Bad coordinates!')
+    if not 'listnamesersfgrd' in dictchalinpt:
+        dictchalinpt['listnamesersfgrd'] = []
 
-                if gmod.typespatdist[l] == 'los3':
-                    gmodstat.dictelem[l]['dglc'], gmodstat.dictelem[l]['thet'], gmodstat.dictelem[l]['phii'] = retr_los3(gmodstat.dictelem[l]['dlos'], \
-                                                                                                        gmodstat.dictelem[l]['xpos'], gmodstat.dictelem[l]['ypos'])
+    if not 'typeemishost' in dictchalinpt:
+        dictchalinpt['typeemishost'] = 'Sersic'
 
-                # evaluate flux for pulsars
-                if gmod.typeelem[l] == 'lghtpntspuls':
-                    gmodstat.dictelem[l]['lumi'] = retr_lumipuls(gmodstat.dictelem[l]['geff'], gmodstat.dictelem[l]['magf'], gmodstat.dictelem[l]['per0'])
-                if gmod.typeelem[l] == 'lghtpntsagnntrue':
-                    gmodstat.dictelem[l]['reds'] = gdat.redsfromdlosobjt(gmodstat.dictelem[l]['dlos'])
-                    gmodstat.dictelem[l]['lumi'] = gmodstat.dictelem[l]['lum0'] * (1. + gmodstat.dictelem[l]['reds'])**4
-                if gmod.typeelem[l] == 'lghtpntspuls' or gmod.typeelem[l] == 'lghtpntsagnntrue':
-                    gmodstat.dictelem[l]['flux'] = retr_flux(gdat, gmodstat.dictelem[l]['lumi'], gmodstat.dictelem[l]['dlos'])
-                # evaluate spectra
-                if gmod.typeelem[l].startswith('lghtline'):
-                    if gmod.typeelem[l] == 'lghtlinevoig':
-                        gmodstat.dictelem[l]['spec'] = retr_spec(gdat, gmodstat.dictelem[l]['flux'], elin=gmodstat.dictelem[l]['elin'], sigm=gmodstat.dictelem[l]['sigm'], \
-                                                                                                          gamm=gmodstat.dictelem[l]['gamm'], spectype=gmod.spectype[l])
-                    else:
-                        gmodstat.dictelem[l]['spec'] = retr_spec(gdat, gmodstat.dictelem[l]['flux'], \
-                                                                                            elin=gmodstat.dictelem[l]['elin'], edisintp=gdat.edisintp, spectype=gmod.spectype[l])
-                else:
-                    sindcolr = [gmodstat.dictelem[l]['sindcolr%04d' % i] for i in gdat.indxenerinde]
-                    gmodstat.dictelem[l]['spec'] = retr_spec(gdat, gmodstat.dictelem[l]['flux'], sind=gmodstat.dictelem[l]['sind'], curv=gmodstat.dictelem[l]['curv'], \
-                                                                                                expc=gmodstat.dictelem[l]['expc'], sindcolr=sindcolr, spectype=gmod.spectype[l])
+    if not 'numbener' in dictchalinpt:
+        dictchalinpt['numbener'] = 1
 
-    stopchro(gdat, gdatmodi, 'elem')
-    
-    ### evaluate the model
-    initchro(gdat, gdatmodi, 'modl')
-    
     # process a sample vector and the occupancy list to calculate secondary variables
-    if gmod.boollens:
-        xpossour = gmodstat.paragenrscalfull[gmod.indxpara.xpossour]
-        ypossour = gmodstat.paragenrscalfull[gmod.indxpara.ypossour]
-    
-        gmodstat.fluxsour = gmodstat.paragenrscalfull[gmod.indxpara.fluxsour]
-        if gdat.numbener > 1:
-            gmodstat.sindsour = gmodstat.paragenrscalfull[gmod.indxpara.sindsour]
-        gmodstat.sizesour = gmodstat.paragenrscalfull[gmod.indxpara.sizesour]
-        gmodstat.ellpsour = gmodstat.paragenrscalfull[gmod.indxpara.ellpsour]
-        gmodstat.anglsour = gmodstat.paragenrscalfull[gmod.indxpara.anglsour]
-    
-        gmodstat.beinhost = [[] for e in gmod.indxsersfgrd]
-        for e in gmod.indxsersfgrd:
-            gmodstat.beinhost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'beinhostisf%d' % e)]
-    
-        # maybe to be deleted
-        #defl = np.zeros((gdat.numbpixlcart, 2))
-        
-    if gmod.typeemishost != 'none':
-        gmodstat.xposhost = [[] for e in gmod.indxsersfgrd]
-        gmodstat.yposhost = [[] for e in gmod.indxsersfgrd]
-        gmodstat.fluxhost = [[] for e in gmod.indxsersfgrd]
-        if gdat.numbener > 1:
-            gmodstat.sindhost = [[] for e in gmod.indxsersfgrd]
-        gmodstat.sizehost = [[] for e in gmod.indxsersfgrd]
-        for e in gmod.indxsersfgrd:
-            gmodstat.xposhost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'xposhostisf%d' % e)]
-            gmodstat.yposhost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'yposhostisf%d' % e)]
-            gmodstat.fluxhost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'fluxhostisf%d' % e)]
-            if gdat.numbener > 1:
-                gmodstat.sindhost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'sindhostisf%d' % e)]
-            gmodstat.sizehost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'sizehostisf%d' % e)]
-        gmodstat.ellphost = [[] for e in gmod.indxsersfgrd]
-        gmodstat.anglhost = [[] for e in gmod.indxsersfgrd]
-        gmodstat.serihost = [[] for e in gmod.indxsersfgrd]
-        for e in gmod.indxsersfgrd:
-            gmodstat.ellphost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'ellphostisf%d' % e)]
-            gmodstat.anglhost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'anglhostisf%d' % e)]
-            gmodstat.serihost[e] = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'serihostisf%d' % e)]
-    
-    # determine the indices of the pixels over which element kernels will be evaluated
-    if gdat.boolbindspat:
-        if gmod.numbpopl > 0:
-            listindxpixlelem = [[] for l in gmod.indxpopl]
-            listindxpixlelemconc = [[] for l in gmod.indxpopl]
-            for l in gmod.indxpopl:
-                if gmodstat.numbelem[l] > 0:
-                    listindxpixlelem[l], listindxpixlelemconc[l] = retr_indxpixlelemconc(gdat, strgmodl, gmodstat.dictelem, l)
-                    
-    if gmod.boollens:
-        gmodstat.sherextr = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'sherextr')]
-        gmodstat.sangextr = gmodstat.paragenrscalfull[getattr(gmod.indxpara, 'sangextr')]
-       
-        ## host halo deflection
-        initchro(gdat, gdatmodi, 'deflhost')
-        deflhost = [[] for e in gmod.indxsersfgrd]
-            
-        indxpixlmiss = gdat.indxpixlcart
 
-        for e in gmod.indxsersfgrd:
-            if gdat.typeverb > 1:
-                print('Evaluating the deflection field due to host galaxy %d' % e)
-                print('xposhost[e]')
-                print(gmodstat.xposhost[e])
-                print('yposhost[e]')
-                print(gmodstat.yposhost[e])
-                print('beinhost[e]')
-                print(gmodstat.beinhost[e])
-                print('gmodstat.ellphost[e]')
-                print(gmodstat.ellphost[e])
-                print('gmodstat.anglhost[e]')
-                print(gmodstat.anglhost[e])
-
-            deflhost[e] = chalcedon.retr_defl(gdat.xposgrid, gdat.yposgrid, indxpixlmiss, gmodstat.xposhost[e], gmodstat.yposhost[e], \
-                                                                        gmodstat.beinhost[e], ellp=gmodstat.ellphost[e], angl=gmodstat.anglhost[e])
-             
-            if gdat.booldiag:
-                if not np.isfinite(deflhost[e]).all():
-                    print('')
-                    print('')
-                    print('')
-                    print('gdat.xposgrid')
-                    summgene(gdat.xposgrid)
-                    print('gdat.yposgrid')
-                    summgene(gdat.yposgrid)
-                    print('indxpixlmiss')
-                    summgene(indxpixlmiss)
-                    print('xposhost[e]')
-                    print(gmodstat.xposhost[e])
-                    print('yposhost[e]')
-                    print(gmodstat.yposhost[e])
-                    print('beinhost[e]')
-                    print(gmodstat.beinhost[e])
-                    print('gmodstat.ellphost[e]')
-                    print(gmodstat.ellphost[e])
-                    print('gmodstat.anglhost[e]')
-                    print(gmodstat.anglhost[e])
-                    print('deflhost[e]')
-                    print(deflhost[e])
-                    summgene(deflhost[e])
-                    raise Exception('not np.isfinite(deflhost[e]).all()')
+    numbsersfgrd = len(dictchalinpt['listnamesersfgrd'])
+    indxsersfgrd = np.arange(numbsersfgrd)
+    beinhost = [[] for e in indxsersfgrd]
+    for e in indxsersfgrd:
+        beinhost[e] = paragenr[getattr(indxpara, 'beinhostisf%d' % e)]
+    
+    # maybe to be deleted
+    #defl = np.zeros((gdat.numbpixlcart, 2))
+    #if dictchalinpt['typeemishost'] != 'none':
+    #    xposhost = [[] for e in indxsersfgrd]
+    #    yposhost = [[] for e in indxsersfgrd]
+    #    fluxhost = [[] for e in indxsersfgrd]
+    #    if dictchalinpt['numbener'] > 1:
+    #        sindhost = [[] for e in indxsersfgrd]
+    #    sizehost = [[] for e in indxsersfgrd]
+    #    for e in indxsersfgrd:
+    #        xposhost[e] = paragenr[getattr(indxpara, 'xposhostisf%d' % e)]
+    #        yposhost[e] = paragenr[getattr(indxpara, 'yposhostisf%d' % e)]
+    #        fluxhost[e] = paragenr[getattr(indxpara, 'fluxhostisf%d' % e)]
+    #        if dictchalinpt['numbener'] > 1:
+    #            sindhost[e] = paragenr[getattr(indxpara, 'sindhostisf%d' % e)]
+    #        sizehost[e] = paragenr[getattr(indxpara, 'sizehostisf%d' % e)]
+    #    ellphost = [[] for e in indxsersfgrd]
+    #    anglhost = [[] for e in indxsersfgrd]
+    #    serihost = [[] for e in indxsersfgrd]
+    #    for e in indxsersfgrd:
+    #        ellphost[e] = paragenr[getattr(indxpara, 'ellphostisf%d' % e)]
+    #        anglhost[e] = paragenr[getattr(indxpara, 'anglhostisf%d' % e)]
+    #        serihost[e] = paragenr[getattr(indxpara, 'serihostisf%d' % e)]
+    
+    ## host halo deflection
+    #objttimeprof.initchro(gdat, gdatmodi, 'deflhost')
+    deflhost = [[] for e in indxsersfgrd]
         
-            if gdat.booldiag:
-                indxpixltemp = slice(None)
-            
-            setattr(gmodstat, 'deflhostisf%d' % e, deflhost[e])
-       
-            if gdat.typeverb > 1:
-                print('deflhost[e]')
-                summgene(deflhost[e])
-                
-            defl += deflhost[e]
-            if gdat.typeverb > 1:
-                print('After adding the host deflection...')
-                print('defl')
-                summgene(defl)
-        
-        stopchro(gdat, gdatmodi, 'deflhost')
+    indxpixlmiss = gdat.indxpixlcart
 
-        ## external shear
-        initchro(gdat, gdatmodi, 'deflextr')
-        deflextr = []
-        indxpixltemp = gdat.indxpixlcart
-        deflextr = retr_deflextr(gdat, indxpixltemp, gmodstat.sherextr, gmodstat.sangextr)
-        defl += deflextr
+    for e in indxsersfgrd:
+
+        deflhost[e] = chalcedon.retr_defl(gdat.xposgrid, gdat.yposgrid, indxpixlmiss, xposhost[e], yposhost[e], \
+                                                                    beinhost[e], ellp=ellphost[e], angl=anglhost[e])
+         
+        if gdat.booldiag:
+            if not np.isfinite(deflhost[e]).all():
+                print('')
+                print('')
+                print('')
+                raise Exception('not np.isfinite(deflhost[e]).all()')
+    
+        if gdat.booldiag:
+            indxpixltemp = slice(None)
+        
+        setattr(gmodstat, 'deflhostisf%d' % e, deflhost[e])
+    
         if gdat.typeverb > 1:
-            print('After adding the external deflection...')
+            print('deflhost[e]')
+            summgene(deflhost[e])
+            
+        defl += deflhost[e]
+        if gdat.typeverb > 1:
+            print('After adding the host deflection...')
             print('defl')
             summgene(defl)
-        stopchro(gdat, gdatmodi, 'deflextr')
     
-    if gmod.boolneedpsfnconv:
+    objttimeprof.stopchro(gdat, gdatmodi, 'deflhost')
+
+    ## external shear
+    objttimeprof.initchro(gdat, gdatmodi, 'deflextr')
+    deflextr = []
+    indxpixltemp = gdat.indxpixlcart
+    deflextr = retr_deflextr(gdat, indxpixltemp, sherextr, sangextr)
+    defl += deflextr
+    if gdat.typeverb > 1:
+        print('After adding the external deflection...')
+        print('defl')
+        summgene(defl)
+    objttimeprof.stopchro(gdat, gdatmodi, 'deflextr')
+    
+    if boolneedpsfnconv:
         
-        initchro(gdat, gdatmodi, 'psfnconv')
+        objttimeprof.initchro(gdat, gdatmodi, 'psfnconv')
         
         # compute the PSF convolution object
         if boolcalcpsfnconv:
             psfnconv = [[[] for i in gdat.indxener] for m in gdat.indxdqlt]
-            gmodstat.psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, gmod.typemodlpsfn, strgmodl)
-            fwhm = 2. * retr_psfnwdth(gdat, gmodstat.psfn, 0.5)
+            psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
+            fwhm = 2. * retr_psfnwdth(gdat, psfn, 0.5)
             for mm, m in enumerate(gdat.indxdqlt):
                 for ii, i in enumerate(gdat.indxener):
-                    if gmod.typemodlpsfn == 'singgaus':
-                        sigm = psfp[i+m*gdat.numbener]
+                    if typemodlpsfn == 'singgaus':
+                        sigm = psfp[i+m*dictchalinpt['numbener']]
                     else:
                         sigm = fwhm[i, m] / 2.355
                     psfnconv[mm][ii] = AiryDisk2DKernel(sigm / gdat.sizepixl)
             
-        stopchro(gdat, gdatmodi, 'psfnconv')
+        objttimeprof.stopchro(gdat, gdatmodi, 'psfnconv')
     
-    if gmod.boolneedpsfnintp:
+    if boolneedpsfnintp:
         
         # compute the PSF interpolation object
         if boolcalcpsfnintp:
             if gdat.typepixl == 'heal':
-                gmodstat.psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, gmod.typemodlpsfn, strgmodl)
-                gmodstat.psfnintp = sp.interpolate.interp1d(gdat.blimpara.angl, gmodstat.psfn, axis=1, fill_value='extrapolate')
-                fwhm = 2. * retr_psfnwdth(gdat, gmodstat.psfn, 0.5)
+                psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
+                psfnintp = sp.interpolate.interp1d(gdat.blimpara.angl, psfn, axis=1, fill_value='extrapolate')
+                fwhm = 2. * retr_psfnwdth(gdat, psfn, 0.5)
             
             elif gdat.typepixl == 'cart':
                 if gdat.kernevaltype == 'ulip':
-                    gmodstat.psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, gmod.typemodlpsfn, strgmodl)
-                    gmodstat.psfnintp = sp.interpolate.interp1d(gdat.blimpara.angl, gmodstat.psfn, axis=1, fill_value='extrapolate')
+                    psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
+                    psfnintp = sp.interpolate.interp1d(gdat.blimpara.angl, psfn, axis=1, fill_value='extrapolate')
 
                 if gdat.kernevaltype == 'bspx':
                     
-                    gmodstat.psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.anglcart.flatten(), gmod.typemodlpsfn, strgmodl)
+                    psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.anglcart.flatten(), typemodlpsfn, strgmodl)
                     
                     # side length of the upsampled kernel
                     gdat.numbsidekernusam = 100
@@ -526,47 +356,47 @@ def eval_modl( \
                     kernmatrdesi = np.array([full(nx*nx, 1), x, y, x*x, x*y, y*y, x*x*x, x*x*y, x*y*y, y*y*y]).T
     	        	
                     # output np.array of coefficients
-                    gmodstat.psfnintp = np.empty((gdat.numbsidekern, gdat.numbsidekern, kernmatrdesi.shape[1]))
+                    psfnintp = np.empty((gdat.numbsidekern, gdat.numbsidekern, kernmatrdesi.shape[1]))
 
     	        	# solve p = kernmatrdesi psfnintp for psfnintp
                     for iy in gdat.indxsidekern:
                         for ix in gdat.indxsidekern:
                             p = psf[iy*factkernusam:(iy+1)*factkernusam+1, ix*factkernusam:(ix+1)*factkernusam+1].flatten()
-                            gmodstat.psfnintp[iy, ix, :] = dot(linalg.inv(dot(kernmatrdesi.T, kernmatrdesi)), dot(kernmatrdesi.T, p))
+                            psfnintp[iy, ix, :] = dot(linalg.inv(dot(kernmatrdesi.T, kernmatrdesi)), dot(kernmatrdesi.T, p))
         else:
-            gmodstat.psfnintp = gdat.fitt.this.psfnintp
+            psfnintp = gdat.fitt.this.psfnintp
     
         if gdat.booldiag:
-            if not np.isfinite(gmodstat.psfnintp(0.05)).all():
+            if not np.isfinite(psfnintp(0.05)).all():
                 print('')
                 print('')
                 print('')
                 raise Exception('')
     
-    if gmod.numbpopl > 0:
-        if gmod.boolelemdeflsubhanyy:
+    if numbpopl > 0:
+        if boolelemdeflsubhanyy:
             deflsubh = np.zeros((gdat.numbpixl, 2))
     
-        if gmod.boolelemdeflsubhanyy:
-            initchro(gdat, gdatmodi, 'elemdeflsubh')
+        if boolelemdeflsubhanyy:
+            objttimeprof.initchro(gdat, gdatmodi, 'elemdeflsubh')
             if gdat.typeverb > 1:
                 print('Perturbing subhalo deflection field')
-            for l in gmod.indxpopl:
-                if gmod.typeelem[l] == 'lens':
+            for l in indxpopl:
+                if typeelem[l] == 'lens':
                     for kk, k in enumerate(indxelem[l]):
-                        asca = gmodstat.dictelem[l]['asca'][k]
-                        acut = gmodstat.dictelem[l]['acut'][k]
-                        if gmod.typeelemspateval[l] == 'locl':
+                        asca = dictelem[l]['asca'][k]
+                        acut = dictelem[l]['acut'][k]
+                        if typeelemspateval[l] == 'locl':
                             indxpixl = listindxpixlelem[l][kk]
                         else:
                             indxpixl = gdat.indxpixl
                         deflsubh[indxpixl, :] += chalcedon.retr_defl(gdat.xposgrid, gdat.yposgrid, indxpixl, \
-                                                     gmodstat.dictelem[l]['xpos'][kk], gmodstat.dictelem[l]['ypos'][kk], gmodstat.dictelem[l]['defs'][kk], \
+                                                     dictelem[l]['xpos'][kk], dictelem[l]['ypos'][kk], dictelem[l]['defs'][kk], \
                                                      asca=asca, acut=acut)
             
                     # temp -- find out what is causing the features in the element convergence maps
                     #for kk, k in enumerate(indxelem[l]):
-                    #    indxpixlpnts = retr_indxpixl(gdat, gmodstat.dictelem[l]['ypos'][kk], gmodstat.dictelem[l]['xpos'][kk])
+                    #    indxpixlpnts = retr_indxpixl(gdat, dictelem[l]['ypos'][kk], dictelem[l]['xpos'][kk])
                     #    if deflsubh[listindxpixlelem[l][kk], :]
             
             setattr(gmodstat, 'deflsubh', deflsubh)
@@ -581,47 +411,47 @@ def eval_modl( \
                 print('defl')
                 summgene(defl)
 
-            stopchro(gdat, gdatmodi, 'elemdeflsubh')
+            objttimeprof.stopchro(gdat, gdatmodi, 'elemdeflsubh')
 
     # evaluate surface brightnesses
     sbrt = dict()
-    for name in gmod.listnamediff:
+    for name in listnamediff:
         sbrt[name] = []
     
     ## due to elements
-    if gmod.numbpopl > 0:
-        if gmod.boolelemsbrtdfncanyy:
+    if numbpopl > 0:
+        if boolelemsbrtdfncanyy:
             sbrtdfnc = np.zeros_like(gdat.expo)
-        if gmod.boolelemsbrtextsbgrdanyy: 
+        if boolelemsbrtextsbgrdanyy: 
             sbrtextsbgrd = np.zeros_like(gdat.expo)
         
         # element kernel evaluation
-        if gmod.boolelemsbrtdfncanyy:
-            initchro(gdat, gdatmodi, 'elemsbrtdfnc')
+        if boolelemsbrtdfncanyy:
+            objttimeprof.initchro(gdat, gdatmodi, 'elemsbrtdfnc')
             sbrt['dfnc'] = []
-            for l in gmod.indxpopl:
-                if gmod.boolelemsbrtdfnc[l]:
-                    for k in range(gmodstat.numbelem[l]):
-                        if gmod.boolelemlght[l]:
-                            varbamplextd = gmodstat.dictelem[l]['spec'][:, k]
-                        if gmod.typeelem[l].startswith('clus'):
-                            varbamplextd = gmodstat.dictelem[l]['nobj'][None, k]
-                        if gmod.typeelem[l] == 'clusvari':
-                            sbrtdfnc[0, listindxpixlelem[l][k], 0] += gmodstat.dictelem[l]['nobj'][k] / 2. / np.pi / gmodstat.dictelem[l]['gwdt'][k]**2 * \
-                                np.exp(-0.5 * ((gmodstat.dictelem[l]['xpos'][k] - gdat.xposgrid[listindxpixlelem[l][k]])**2 + \
-                                    (gmodstat.dictelem[l]['ypos'][k] - gdat.yposgrid[listindxpixlelem[l][k]])**2) / gmodstat.dictelem[l]['gwdt'][k]**2)
+            for l in indxpopl:
+                if boolelemsbrtdfnc[l]:
+                    for k in range(numbelem[l]):
+                        if boolelemlght[l]:
+                            varbamplextd = dictelem[l]['spec'][:, k]
+                        if typeelem[l].startswith('clus'):
+                            varbamplextd = dictelem[l]['nobj'][None, k]
+                        if typeelem[l] == 'clusvari':
+                            sbrtdfnc[0, listindxpixlelem[l][k], 0] += dictelem[l]['nobj'][k] / 2. / np.pi / dictelem[l]['gwdt'][k]**2 * \
+                                np.exp(-0.5 * ((dictelem[l]['xpos'][k] - gdat.xposgrid[listindxpixlelem[l][k]])**2 + \
+                                    (dictelem[l]['ypos'][k] - gdat.yposgrid[listindxpixlelem[l][k]])**2) / dictelem[l]['gwdt'][k]**2)
                             
-                        if gmod.boolelempsfn[l]:
-                            sbrtdfnc[:, listindxpixlelem[l][k], :] += retr_sbrtpnts(gdat, gmodstat.dictelem[l]['xpos'][k], \
-                                                             gmodstat.dictelem[l]['ypos'][k], varbamplextd, gmodstat.psfnintp, listindxpixlelem[l][k])
+                        if boolelempsfn[l]:
+                            sbrtdfnc[:, listindxpixlelem[l][k], :] += retr_sbrtpnts(gdat, dictelem[l]['xpos'][k], \
+                                                             dictelem[l]['ypos'][k], varbamplextd, psfnintp, listindxpixlelem[l][k])
                         
-                        if gmod.typeelem[l].startswith('lghtline'):
-                            sbrtdfnc[:, 0, 0] += gmodstat.dictelem[l]['spec'][:, k]
+                        if typeelem[l].startswith('lghtline'):
+                            sbrtdfnc[:, 0, 0] += dictelem[l]['spec'][:, k]
                         
             sbrt['dfnc'] = sbrtdfnc
             
             setattr(gmodstat, 'sbrtdfnc', sbrt['dfnc'])
-            stopchro(gdat, gdatmodi, 'elemsbrtdfnc')
+            objttimeprof.stopchro(gdat, gdatmodi, 'elemsbrtdfnc')
             
             if gdat.booldiag:
                 if not np.isfinite(sbrtdfnc).all():
@@ -629,28 +459,28 @@ def eval_modl( \
 
                 cntppntschec = retr_cntp(gdat, sbrt['dfnc'])
                 numbelemtemp = 0
-                for l in gmod.indxpopl:
-                    if gmod.boolelemsbrtdfnc[l]:
-                        numbelemtemp += np.sum(gmodstat.numbelem[l])
+                for l in indxpopl:
+                    if boolelemsbrtdfnc[l]:
+                        numbelemtemp += np.sum(numbelem[l])
                 if np.amin(cntppntschec) < -0.1:
                     raise Exception('Point source spectral surface brightness is not positive-definite.')
             
         
-        if gmod.boolelemsbrtextsbgrdanyy:
-            initchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
+        if boolelemsbrtextsbgrdanyy:
+            objttimeprof.initchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
             if strgstat == 'this':
-                for l in gmod.indxpopl:
-                    if gmod.typeelem[l] == 'lghtgausbgrd':
-                        for k in range(gmodstat.numbelem[l]):
-                            sbrtextsbgrd[:, listindxpixlelem[l][k], :] += gmodstat.dictelem[l]['spec'][:, k, None, None] / \
-                                    2. / np.pi / gmodstat.dictelem[l]['gwdt'][k]**2 * \
-                                    np.exp(-0.5 * ((gmodstat.dictelem[l]['xpos'][k] - gdat.xposgrid[None, listindxpixlelem[l][k], None])**2 + \
-                                    (gmodstat.dictelem[l]['ypos'][k] - gdat.yposgrid[None, listindxpixlelem[l][k], None])**2) / gmodstat.dictelem[l]['gwdt'][k]**2)
+                for l in indxpopl:
+                    if typeelem[l] == 'lghtgausbgrd':
+                        for k in range(numbelem[l]):
+                            sbrtextsbgrd[:, listindxpixlelem[l][k], :] += dictelem[l]['spec'][:, k, None, None] / \
+                                    2. / np.pi / dictelem[l]['gwdt'][k]**2 * \
+                                    np.exp(-0.5 * ((dictelem[l]['xpos'][k] - gdat.xposgrid[None, listindxpixlelem[l][k], None])**2 + \
+                                    (dictelem[l]['ypos'][k] - gdat.yposgrid[None, listindxpixlelem[l][k], None])**2) / dictelem[l]['gwdt'][k]**2)
                 
                 setattr(gmodstat, 'sbrtextsbgrd', sbrtextsbgrd)
             sbrt['extsbgrd'] = []
             sbrt['extsbgrd'] = sbrtextsbgrd
-            stopchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
+            objttimeprof.stopchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
             
             if gdat.booldiag:
                 cntppntschec = retr_cntp(gdat, sbrt['extsbgrd'])
@@ -659,30 +489,30 @@ def eval_modl( \
         
     
     ## lensed surface brightness
-    if gmod.boollens:
+    if boollens:
         
-        initchro(gdat, gdatmodi, 'sbrtlens')
+        objttimeprof.initchro(gdat, gdatmodi, 'sbrtlens')
         
         if gdat.typeverb > 1:
             print('Evaluating lensed surface brightness...')
         
-        if strgstat == 'this' or gmod.numbpopl > 0 and gmod.boolelemsbrtextsbgrdanyy:
+        if strgstat == 'this' or numbpopl > 0 and boolelemsbrtextsbgrdanyy:
             sbrt['bgrd'] = []
-        if gmod.numbpopl > 0 and gmod.boolelemsbrtextsbgrdanyy:
+        if numbpopl > 0 and boolelemsbrtextsbgrdanyy:
             sbrt['bgrdgalx'] = []
         
-        if gdat.numbener > 1:
-            specsour = retr_spec(gdat, np.array([gmodstat.fluxsour]), sind=np.array([gmodstat.sindsour]))
+        if dictchalinpt['numbener'] > 1:
+            specsour = retr_spec(gdat, np.array([fluxsour]), sind=np.array([sindsour]))
         else:
-            specsour = np.array([gmodstat.fluxsour])
+            specsour = np.array([fluxsour])
         
-        if gmod.numbpopl > 0 and gmod.boolelemsbrtextsbgrdanyy:
+        if numbpopl > 0 and boolelemsbrtextsbgrdanyy:
         
             if gdat.typeverb > 1:
                 print('Interpolating the background emission...')
 
             sbrt['bgrdgalx'] = retr_sbrtsers(gdat, gdat.xposgrid[indxpixlelem[0]], gdat.yposgrid[indxpixlelem[0]], \
-                                                                            xpossour, ypossour, specsour, gmodstat.sizesour, gmodstat.ellpsour, gmodstat.anglsour)
+                                                                            xpossour, ypossour, specsour, sizesour, ellpsour, anglsour)
             
             sbrt['bgrd'] = sbrt['bgrdgalx'] + sbrtextsbgrd
         
@@ -702,11 +532,11 @@ def eval_modl( \
             
             sbrt['lens'] = retr_sbrtsers(gdat, gdat.xposgrid - defl[gdat.indxpixl, 0], \
                                                    gdat.yposgrid - defl[gdat.indxpixl, 1], \
-                                                   xpossour, ypossour, specsour, gmodstat.sizesour, gmodstat.ellpsour, gmodstat.anglsour)
+                                                   xpossour, ypossour, specsour, sizesour, ellpsour, anglsour)
             
             sbrt['bgrd'] = retr_sbrtsers(gdat, gdat.xposgrid, \
                                                    gdat.yposgrid, \
-                                                   xpossour, ypossour, specsour, gmodstat.sizesour, gmodstat.ellpsour, gmodstat.anglsour)
+                                                   xpossour, ypossour, specsour, sizesour, ellpsour, anglsour)
             
         setattr(gmodstat, 'sbrtlens', sbrt['lens'])
 
@@ -716,47 +546,47 @@ def eval_modl( \
             if (sbrt['lens'] == 0).all():
                 raise Exception('Lensed emission is zero everywhere.')
 
-        stopchro(gdat, gdatmodi, 'sbrtlens')
+        objttimeprof.stopchro(gdat, gdatmodi, 'sbrtlens')
         
     ## host galaxy
-    if gmod.typeemishost != 'none':
-        initchro(gdat, gdatmodi, 'sbrthost')
+    if typeemishost != 'none':
+        objttimeprof.initchro(gdat, gdatmodi, 'sbrthost')
 
-        for e in gmod.indxsersfgrd:
+        for e in indxsersfgrd:
             if gdat.typeverb > 1:
                 print('Evaluating the host galaxy surface brightness...')
             
-            if gdat.numbener > 1:
-                spechost = retr_spec(gdat, np.array([gmodstat.fluxhost[e]]), sind=np.array([gmodstat.sindhost[e]]))
+            if dictchalinpt['numbener'] > 1:
+                spechost = retr_spec(gdat, np.array([fluxhost[e]]), sind=np.array([sindhost[e]]))
             else:
-                spechost = np.array([gmodstat.fluxhost[e]])
+                spechost = np.array([fluxhost[e]])
             
-            sbrt['hostisf%d' % e] = retr_sbrtsers(gdat, gdat.xposgrid, gdat.yposgrid, gmodstat.xposhost[e], \
-                                                         gmodstat.yposhost[e], spechost, gmodstat.sizehost[e], gmodstat.ellphost[e], gmodstat.anglhost[e], gmodstat.serihost[e])
+            sbrt['hostisf%d' % e] = retr_sbrtsers(gdat, gdat.xposgrid, gdat.yposgrid, xposhost[e], \
+                                                         yposhost[e], spechost, sizehost[e], ellphost[e], anglhost[e], serihost[e])
             
             setattr(gmodstat, 'sbrthostisf%d' % e, sbrt['hostisf%d' % e])
                 
-        stopchro(gdat, gdatmodi, 'sbrthost')
+        objttimeprof.stopchro(gdat, gdatmodi, 'sbrthost')
     
     ## total model
-    initchro(gdat, gdatmodi, 'sbrtmodl')
+    objttimeprof.initchro(gdat, gdatmodi, 'sbrtmodl')
     if gdat.typeverb > 1:
         print('Summing up the model emission...')
     
-    sbrt['modlraww'] = np.zeros((gdat.numbener, gdat.numbpixlcart, gdat.numbdqlt))
-    for name in gmod.listnamediff:
+    sbrt['modlraww'] = np.zeros((dictchalinpt['numbener'], gdat.numbpixlcart, gdat.numbdqlt))
+    for name in listnamediff:
         if name.startswith('back'):
-            gmod.indxbacktemp = int(name[4:8])
+            indxbacktemp = int(name[4:8])
             
-            if gdat.typepixl == 'heal' and (gmod.typeevalpsfn == 'full' or gmod.typeevalpsfn == 'conv') and not gmod.boolunifback[gmod.indxbacktemp]:
-                sbrttemp = getattr(gmod, 'sbrtbackhealfull')[gmod.indxbacktemp]
+            if gdat.typepixl == 'heal' and (typeevalpsfn == 'full' or typeevalpsfn == 'conv') and not boolunifback[indxbacktemp]:
+                sbrttemp = getattr(gmod, 'sbrtbackhealfull')[indxbacktemp]
             else:
-                sbrttemp = gmod.sbrtbacknorm[gmod.indxbacktemp]
+                sbrttemp = sbrtbacknorm[indxbacktemp]
            
-            if gmod.boolspecback[gmod.indxbacktemp]:
-                sbrt[name] = sbrttemp * bacp[gmod.indxbacpback[gmod.indxbacktemp]]
+            if boolspecback[indxbacktemp]:
+                sbrt[name] = sbrttemp * bacp[indxbacpback[indxbacktemp]]
             else:
-                sbrt[name] = sbrttemp * bacp[gmod.indxbacpback[gmod.indxbacktemp][gdat.indxener]][:, None, None]
+                sbrt[name] = sbrttemp * bacp[indxbacpback[indxbacktemp][gdat.indxener]][:, None, None]
         
         sbrt['modlraww'] += sbrt[name]
         
@@ -765,12 +595,12 @@ def eval_modl( \
                 raise Exception('')
 
     # convolve the model with the PSF
-    if gmod.convdiffanyy and (gmod.typeevalpsfn == 'full' or gmod.typeevalpsfn == 'conv'):
+    if convdiffanyy and (typeevalpsfn == 'full' or typeevalpsfn == 'conv'):
         sbrt['modlconv'] = []
         # temp -- isotropic background proposals are unnecessarily entering this clause
         if gdat.typeverb > 1:
             print('Convolving the model image with the PSF...') 
-        sbrt['modlconv'] = np.zeros((gdat.numbener, gdat.numbpixl, gdat.numbdqlt))
+        sbrt['modlconv'] = np.zeros((dictchalinpt['numbener'], gdat.numbpixl, gdat.numbdqlt))
         for ii, i in enumerate(gdat.indxener):
             for mm, m in enumerate(gdat.indxdqlt):
                 if gdat.strgcnfg == 'pcat_ferm_igal_simu_test':
@@ -804,13 +634,16 @@ def eval_modl( \
         summgene(sbrt['modl'])
 
     ## add PSF-convolved delta functions to the model
-    if gmod.numbpopl > 0 and gmod.boolelemsbrtdfncanyy:
+    if numbpopl > 0 and boolelemsbrtdfncanyy:
         sbrt['modl'] += sbrt['dfnc']
-    stopchro(gdat, gdatmodi, 'sbrtmodl')
+    objttimeprof.stopchro(gdat, gdatmodi, 'sbrtmodl')
     
     if gdat.typeverb > 1:
         print('sbrt[modl]')
         summgene(sbrt['modl'])
+    
+    dictchaloutp['objttimeprof'] = objttimeprof
 
+    return dictchaloutp
 
 
