@@ -2,10 +2,36 @@ import numpy as np
 
 import time as modutime
 
+import astropy
+import astropy.convolution
+
 import tdpy
 import aspendos
 from tdpy import summgene
+import nicomedia
 
+
+def retr_radieins_inft( \
+                       # velocity dispersion [km/s]
+                       dispvelo, \
+
+                      ):
+    '''
+    Calculate the Einstein radius for a source position at infinity
+    '''
+    """
+            :param deflector_dict: deflector properties
+            :param v_sigma: velocity dispersion in km/s
+            :return: Einstein radius in arc-seconds
+            """
+    if v_sigma is None:
+        if deflector_dict is None:
+            raise ValueError("Either deflector_dict or v_sigma must be provided")
+        else:
+            v_sigma = deflector_dict['vel_disp']
+
+    theta_E_infinity = 4 * np.pi * (dispvelo / 3e5)**2 * (180. / np.pi * 3600.)
+    return theta_E_infinity
 
 
 def retr_dflxslensing(time, epocslen, amplslen, duratrantotl):
@@ -106,6 +132,21 @@ def retr_ratimassbeinsqrd(adissour, adislens, adislenssour):
     return ratimassbeinsqrd
 
 
+def retr_deflextr(xposgrid, yposgrid, sher, sang):
+    '''
+    Return deflection field due to large-scale structure
+    '''    
+    
+    factcosi = sher * np.cos(2. * sang)
+    factsine = sher * np.cos(2. * sang)
+    deflxpos = factcosi * xposgrid + factsine * yposgrid
+    deflypos = factsine * xposgrid - factcosi * yposgrid
+    
+    deflextr = np.vstack((deflxpos, deflypos)).T
+
+    return deflextr
+
+
 def retr_deflcutf(angl, defs, asca, acut, asym=False):
     '''
     Return deflection due to a subhalo with a cutoff radius
@@ -181,6 +222,16 @@ def eval_emislens( \
                   # input dictionary
                   dictchalinpt=None, \
                   
+                  # number of pixels on a side
+                  numbsidecart=None, \
+
+                  # type of verbosity
+                  ## -1: absolutely no text
+                  ##  0: no text output except critical warnings
+                  ##  1: minimal description of the execution
+                  ##  2: detailed description of the execution
+                  typeverb=1, \
+                  
                   # Boolean flag to turn on diagnostic mode
                   booldiag=True, \
                  ):
@@ -231,7 +282,6 @@ def eval_emislens( \
         beinhost[e] = paragenr[getattr(indxpara, 'beinhostisf%d' % e)]
     
     # maybe to be deleted
-    #defl = np.zeros((gdat.numbpixlcart, 2))
     #if dictchalinpt['typeemishost'] != 'none':
     #    xposhost = [[] for e in indxsersfgrd]
     #    yposhost = [[] for e in indxsersfgrd]
@@ -257,12 +307,23 @@ def eval_emislens( \
     ## host halo deflection
     #objttimeprof.initchro(gdat, gdatmodi, 'deflhost')
     deflhost = [[] for e in indxsersfgrd]
-        
-    indxpixlmiss = gdat.indxpixlcart
+    
+    if numbsidecart is None:
+        numbsidecart = 100
+        maxmfovw = 2.
+        numbpixlcart = numbsidecart**2
+        indxpixlcart = np.arange(numbpixlcart)
+        xposside = np.linspace(-maxmfovw, maxmfovw, 100)
+        yposside = xposside
+        xposgrid, yposgrid = np.meshgrid(xposside, yposside, indexing='ij')
+        xposgridflat = xposgrid.flatten()
+        yposgridflat = yposgrid.flatten()
 
+    defl = np.zeros((numbpixlcart, 2))
+        
     for e in indxsersfgrd:
 
-        deflhost[e] = chalcedon.retr_defl(gdat.xposgrid, gdat.yposgrid, indxpixlmiss, xposhost[e], yposhost[e], \
+        deflhost[e] = retr_defl(gdat.xposgrid, gdat.yposgrid, indxpixlcart, xposhost[e], yposhost[e], \
                                                                     beinhost[e], ellp=ellphost[e], angl=anglhost[e])
          
         if gdat.booldiag:
@@ -277,66 +338,86 @@ def eval_emislens( \
         
         setattr(gmodstat, 'deflhostisf%d' % e, deflhost[e])
     
-        if gdat.typeverb > 1:
+        if typeverb > 1:
             print('deflhost[e]')
             summgene(deflhost[e])
             
         defl += deflhost[e]
-        if gdat.typeverb > 1:
+        if typeverb > 1:
             print('After adding the host deflection...')
             print('defl')
             summgene(defl)
     
-    objttimeprof.stopchro(gdat, gdatmodi, 'deflhost')
+    #objttimeprof.stopchro(gdat, gdatmodi, 'deflhost')
 
     ## external shear
-    objttimeprof.initchro(gdat, gdatmodi, 'deflextr')
-    deflextr = []
-    indxpixltemp = gdat.indxpixlcart
-    deflextr = retr_deflextr(gdat, indxpixltemp, sherextr, sangextr)
+    #objttimeprof.initchro(gdat, gdatmodi, 'deflextr')
+    deflextr = retr_deflextr(xposgridflat, yposgridflat, dictchalinpt['sherextr'], dictchalinpt['sangextr'])
     defl += deflextr
-    if gdat.typeverb > 1:
+    
+    if typeverb > 1:
         print('After adding the external deflection...')
         print('defl')
         summgene(defl)
-    objttimeprof.stopchro(gdat, gdatmodi, 'deflextr')
     
+    #objttimeprof.stopchro(gdat, gdatmodi, 'deflextr')
+    
+    typeevalpsfn = 'full'
+
+    boolneedpsfnconv = typeevalpsfn == 'conv' or typeevalpsfn == 'full'
+    boolcalcpsfnconv = boolneedpsfnconv
+    
+    sizepixl = 0.11 # [arcsec]
+
+    numbdqlt = 1
+    indxdqlt = np.arange(numbdqlt)
+    numbener = 1
+    indxener = np.arange(numbener)
+    
+    arryangl = np.linspace(0.1, 2., 100)
+    
+    typemodlpsfn = 'singgaus'
+    
+    dictpara = dict()
+
+    dictpara['sigc'] = np.array([[1.]])
+
     if boolneedpsfnconv:
         
-        objttimeprof.initchro(gdat, gdatmodi, 'psfnconv')
+        #objttimeprof.initchro(gdat, gdatmodi, 'psfnconv')
         
         # compute the PSF convolution object
         if boolcalcpsfnconv:
-            psfnconv = [[[] for i in gdat.indxener] for m in gdat.indxdqlt]
-            psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
-            fwhm = 2. * retr_psfnwdth(gdat, psfn, 0.5)
-            for mm, m in enumerate(gdat.indxdqlt):
-                for ii, i in enumerate(gdat.indxener):
+            objtpsfnconv = [[[] for i in indxener] for m in indxdqlt]
+            psfn = nicomedia.retr_psfn(arryangl, dictpara, indxener, typemodlpsfn)
+            fwhm = 2. * nicomedia.retr_psfnwdth(psfn, arryangl, 0.5)
+            for mm, m in enumerate(indxdqlt):
+                for ii, i in enumerate(indxener):
                     if typemodlpsfn == 'singgaus':
-                        sigm = psfp[i+m*dictchalinpt['numbener']]
+                        sigm = dictpara['sigc'][i, m]
                     else:
                         sigm = fwhm[i, m] / 2.355
-                    psfnconv[mm][ii] = AiryDisk2DKernel(sigm / gdat.sizepixl)
+                    objtpsfnconv[mm][ii] =  astropy.convolution.AiryDisk2DKernel(sigm / sizepixl)
             
-        objttimeprof.stopchro(gdat, gdatmodi, 'psfnconv')
+        #objttimeprof.stopchro(gdat, gdatmodi, 'psfnconv')
     
     if boolneedpsfnintp:
         
         # compute the PSF interpolation object
         if boolcalcpsfnintp:
             if gdat.typepixl == 'heal':
-                psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
+                psfn = nicomedia.retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
                 psfnintp = sp.interpolate.interp1d(gdat.blimpara.angl, psfn, axis=1, fill_value='extrapolate')
-                fwhm = 2. * retr_psfnwdth(gdat, psfn, 0.5)
+                fwhm = 2. * nicomedia.retr_psfnwdth(gdat, arryangl, psfn, 0.5)
             
             elif gdat.typepixl == 'cart':
                 if gdat.kernevaltype == 'ulip':
-                    psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
+                    psfn = nicomedia.retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.angl, typemodlpsfn, strgmodl)
                     psfnintp = sp.interpolate.interp1d(gdat.blimpara.angl, psfn, axis=1, fill_value='extrapolate')
 
                 if gdat.kernevaltype == 'bspx':
                     
-                    psfn = retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.anglcart.flatten(), typemodlpsfn, strgmodl)
+                    psfn = nicomedia.retr_psfn(gdat, psfp, gdat.indxener, gdat.blimpara.anglcart.flatten(), typemodlpsfn, strgmodl)
                     
                     # side length of the upsampled kernel
                     gdat.numbsidekernusam = 100
@@ -378,8 +459,10 @@ def eval_emislens( \
             deflsubh = np.zeros((gdat.numbpixl, 2))
     
         if boolelemdeflsubhanyy:
-            objttimeprof.initchro(gdat, gdatmodi, 'elemdeflsubh')
-            if gdat.typeverb > 1:
+            
+            #objttimeprof.initchro(gdat, gdatmodi, 'elemdeflsubh')
+            
+            if typeverb > 1:
                 print('Perturbing subhalo deflection field')
             for l in indxpopl:
                 if typeelem[l] == 'lens':
@@ -406,12 +489,13 @@ def eval_emislens( \
                     raise Exception('Element deflection is not finite.')
 
             defl += deflsubh
-            if gdat.typeverb > 1:
+            if typeverb > 1:
                 print('After adding subhalo deflection to the total deflection')
                 print('defl')
                 summgene(defl)
 
-            objttimeprof.stopchro(gdat, gdatmodi, 'elemdeflsubh')
+            
+            #objttimeprof.stopchro(gdat, gdatmodi, 'elemdeflsubh')
 
     # evaluate surface brightnesses
     sbrt = dict()
@@ -427,7 +511,7 @@ def eval_emislens( \
         
         # element kernel evaluation
         if boolelemsbrtdfncanyy:
-            objttimeprof.initchro(gdat, gdatmodi, 'elemsbrtdfnc')
+            #objttimeprof.initchro(gdat, gdatmodi, 'elemsbrtdfnc')
             sbrt['dfnc'] = []
             for l in indxpopl:
                 if boolelemsbrtdfnc[l]:
@@ -451,7 +535,7 @@ def eval_emislens( \
             sbrt['dfnc'] = sbrtdfnc
             
             setattr(gmodstat, 'sbrtdfnc', sbrt['dfnc'])
-            objttimeprof.stopchro(gdat, gdatmodi, 'elemsbrtdfnc')
+            #objttimeprof.stopchro(gdat, gdatmodi, 'elemsbrtdfnc')
             
             if gdat.booldiag:
                 if not np.isfinite(sbrtdfnc).all():
@@ -467,7 +551,7 @@ def eval_emislens( \
             
         
         if boolelemsbrtextsbgrdanyy:
-            objttimeprof.initchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
+            #objttimeprof.initchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
             if strgstat == 'this':
                 for l in indxpopl:
                     if typeelem[l] == 'lghtgausbgrd':
@@ -480,7 +564,7 @@ def eval_emislens( \
                 setattr(gmodstat, 'sbrtextsbgrd', sbrtextsbgrd)
             sbrt['extsbgrd'] = []
             sbrt['extsbgrd'] = sbrtextsbgrd
-            objttimeprof.stopchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
+            #objttimeprof.stopchro(gdat, gdatmodi, 'elemsbrtextsbgrd')
             
             if gdat.booldiag:
                 cntppntschec = retr_cntp(gdat, sbrt['extsbgrd'])
@@ -491,9 +575,9 @@ def eval_emislens( \
     ## lensed surface brightness
     if boollens:
         
-        objttimeprof.initchro(gdat, gdatmodi, 'sbrtlens')
+        #objttimeprof.initchro(gdat, gdatmodi, 'sbrtlens')
         
-        if gdat.typeverb > 1:
+        if typeverb > 1:
             print('Evaluating lensed surface brightness...')
         
         if strgstat == 'this' or numbpopl > 0 and boolelemsbrtextsbgrdanyy:
@@ -508,7 +592,7 @@ def eval_emislens( \
         
         if numbpopl > 0 and boolelemsbrtextsbgrdanyy:
         
-            if gdat.typeverb > 1:
+            if typeverb > 1:
                 print('Interpolating the background emission...')
 
             sbrt['bgrdgalx'] = retr_sbrtsers(gdat, gdat.xposgrid[indxpixlelem[0]], gdat.yposgrid[indxpixlelem[0]], \
@@ -527,7 +611,7 @@ def eval_emislens( \
                     # temp -- T?
                     sbrt['lens'][ii, :, m] = sbrtbgrdobjt(yposprim, xposprim, grid=False).flatten()
         else:
-            if gdat.typeverb > 1:
+            if typeverb > 1:
                 print('Not interpolating the background emission...')
             
             sbrt['lens'] = retr_sbrtsers(gdat, gdat.xposgrid - defl[gdat.indxpixl, 0], \
@@ -546,14 +630,14 @@ def eval_emislens( \
             if (sbrt['lens'] == 0).all():
                 raise Exception('Lensed emission is zero everywhere.')
 
-        objttimeprof.stopchro(gdat, gdatmodi, 'sbrtlens')
+        #objttimeprof.stopchro(gdat, gdatmodi, 'sbrtlens')
         
     ## host galaxy
     if typeemishost != 'none':
-        objttimeprof.initchro(gdat, gdatmodi, 'sbrthost')
+        #objttimeprof.initchro(gdat, gdatmodi, 'sbrthost')
 
         for e in indxsersfgrd:
-            if gdat.typeverb > 1:
+            if typeverb > 1:
                 print('Evaluating the host galaxy surface brightness...')
             
             if dictchalinpt['numbener'] > 1:
@@ -566,11 +650,11 @@ def eval_emislens( \
             
             setattr(gmodstat, 'sbrthostisf%d' % e, sbrt['hostisf%d' % e])
                 
-        objttimeprof.stopchro(gdat, gdatmodi, 'sbrthost')
+        #objttimeprof.stopchro(gdat, gdatmodi, 'sbrthost')
     
     ## total model
-    objttimeprof.initchro(gdat, gdatmodi, 'sbrtmodl')
-    if gdat.typeverb > 1:
+    #objttimeprof.initchro(gdat, gdatmodi, 'sbrtmodl')
+    if typeverb > 1:
         print('Summing up the model emission...')
     
     sbrt['modlraww'] = np.zeros((dictchalinpt['numbener'], gdat.numbpixlcart, gdat.numbdqlt))
@@ -598,7 +682,7 @@ def eval_emislens( \
     if convdiffanyy and (typeevalpsfn == 'full' or typeevalpsfn == 'conv'):
         sbrt['modlconv'] = []
         # temp -- isotropic background proposals are unnecessarily entering this clause
-        if gdat.typeverb > 1:
+        if typeverb > 1:
             print('Convolving the model image with the PSF...') 
         sbrt['modlconv'] = np.zeros((dictchalinpt['numbener'], gdat.numbpixl, gdat.numbdqlt))
         for ii, i in enumerate(gdat.indxener):
@@ -609,12 +693,12 @@ def eval_emislens( \
                 if gdat.typepixl == 'cart':
                     if gdat.numbpixl == gdat.numbpixlcart:
                         sbrt['modlconv'][ii, :, mm] = convolve_fft(sbrt['modlraww'][ii, :, mm].reshape((gdat.numbsidecart, gdat.numbsidecart)), \
-                                                                                                                             psfnconv[mm][ii]).flatten()
+                                                                                                                             objtpsfnconv[mm][ii]).flatten()
                     else:
                         sbrtfull = np.zeros(gdat.numbpixlcart)
                         sbrtfull[gdat.indxpixlrofi] = sbrt['modlraww'][ii, :, mm]
                         sbrtfull = sbrtfull.reshape((gdat.numbsidecart, gdat.numbsidecart))
-                        sbrt['modlconv'][ii, :, mm] = convolve_fft(sbrtfull, psfnconv[mm][ii]).flatten()[gdat.indxpixlrofi]
+                        sbrt['modlconv'][ii, :, mm] = convolve_fft(sbrtfull, objtpsfnconv[mm][ii]).flatten()[gdat.indxpixlrofi]
                     indx = np.where(sbrt['modlconv'][ii, :, mm] < 1e-50)
                     sbrt['modlconv'][ii, indx, mm] = 1e-50
                 if gdat.typepixl == 'heal':
@@ -625,24 +709,24 @@ def eval_emislens( \
         # temp -- this could be made faster -- need the copy() statement because sbrtdfnc gets added to sbrtmodl afterwards
         sbrt['modl'] = np.copy(sbrt['modlconv'])
     else:
-        if gdat.typeverb > 1:
+        if typeverb > 1:
             print('Skipping PSF convolution of the model...')
         sbrt['modl'] = np.copy(sbrt['modlraww'])
     
-    if gdat.typeverb > 1:
+    if typeverb > 1:
         print('sbrt[modl]')
         summgene(sbrt['modl'])
 
     ## add PSF-convolved delta functions to the model
     if numbpopl > 0 and boolelemsbrtdfncanyy:
         sbrt['modl'] += sbrt['dfnc']
-    objttimeprof.stopchro(gdat, gdatmodi, 'sbrtmodl')
+    #bjttimeprof.stopchro(gdat, gdatmodi, 'sbrtmodl')
     
-    if gdat.typeverb > 1:
+    if typeverb > 1:
         print('sbrt[modl]')
         summgene(sbrt['modl'])
     
-    dictchaloutp['objttimeprof'] = objttimeprof
+    #dictchaloutp['objttimeprof'] = objttimeprof
 
     return dictchaloutp
 
