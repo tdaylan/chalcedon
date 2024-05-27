@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+import skimage
 
 import tdpy
 import aspendos
@@ -8,24 +9,14 @@ import aspendos
 def retr_radieins_inft( \
                        # velocity dispersion [km/s]
                        dispvelo, \
-
                       ):
     '''
     Calculate the Einstein radius for a source position at infinity
     '''
-    """
-            :param deflector_dict: deflector properties
-            :param v_sigma: velocity dispersion in km/s
-            :return: Einstein radius in arc-seconds
-            """
-    if v_sigma is None:
-        if deflector_dict is None:
-            raise ValueError("Either deflector_dict or v_sigma must be provided")
-        else:
-            v_sigma = deflector_dict['vel_disp']
-
-    theta_E_infinity = 4 * np.pi * (dispvelo / 3e5)**2 * (180. / np.pi * 3600.)
-    return theta_E_infinity
+    
+    radieins = 4 * np.pi * (dispvelo / 3e5)**2 * (180. / np.pi * 3600.) # [arcsec]
+    
+    return radieins
 
 
 def retr_dflxslensing(time, epocslen, amplslen, duratrantotl):
@@ -141,12 +132,17 @@ def retr_deflextr(xposgrid, yposgrid, sher, sang):
     return deflextr
 
 
-def retr_deflcutf(angl, defs, asca, acut, asym=False):
+def retr_deflcutf(xposgrid, yposgrid, dictchalinpt, boolasym=False):
     '''
     Return deflection due to a subhalo with a cutoff radius
     '''
-
-    fracanglasca = angl / asca
+    
+    distxpos = xposgrid[:, None] - dictchalinpt['xpossubh'][None, :]
+    distypos = yposgrid[:, None] - dictchalinpt['ypossubh'][None, :]
+    
+    distangl = np.sqrt(distxpos**2 + distypos**2)
+    
+    fracanglasca = distangl / dictchalinpt['ascasubh']
     
     deflcutf = defs / fracanglasca
     
@@ -157,7 +153,7 @@ def retr_deflcutf(angl, defs, asca, acut, asym=False):
     fact[indxlowr] = np.arccosh(1. / fracanglasca[indxlowr]) / np.sqrt(1. - fracanglasca[indxlowr]**2)
     fact[indxuppr] = np.arccos(1. / fracanglasca[indxuppr]) / np.sqrt(fracanglasca[indxuppr]**2 - 1.)
     
-    if asym:
+    if boolasym:
         deflcutf *= np.log(fracanglasca / 2.) + fact
     else:
         fracacutasca = acut / asca
@@ -170,49 +166,58 @@ def retr_deflcutf(angl, defs, asca, acut, asym=False):
     return deflcutf
 
 
-def retr_defl(xposgrid, yposgrid, indxpixlelem, xpos, ypos, angllens, ellp=None, angl=None, rcor=None, asca=None, acut=None):
+def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
     '''
-    Return deflection due to a halo without a cutoff radius
+    Return deflection due to a main halo without a cutoff radius and subhalos with cutoff
     '''
-
-    # translate the grid
-    xpostran = xposgrid[indxpixlelem] - xpos
-    ypostran = yposgrid[indxpixlelem] - ypos
     
-    if ellp is not None and (ellp < 0. or ellp > 1.):
+    dictchaloutp = dict()
+
+    # check inputs
+    if dictchalinpt['ellphalo'] is not None and (dictchalinpt['ellphalo'] < 0. or dictchalinpt['ellphalo'] > 1.):
         raise Exception('')
 
-    if acut is not None:
-        defs = angllens
-        angl = np.sqrt(xpostran**2 + ypostran**2)
-        defl = retr_deflcutf(angl, defs, asca, acut)
-        deflxpos = xpostran / angl * defl
-        deflypos = ypostran / angl * defl
-
-    else:
-        bein = angllens
-
-        # rotate the grid
-        xposrttr = np.cos(angl) * xpostran - np.sin(angl) * ypostran
-        yposrttr = np.sin(angl) * xpostran + np.cos(angl) * ypostran
-        
-        axisrati = 1. - ellp
-        facteccc = np.sqrt(1. - axisrati**2)
-        factrcor = np.sqrt(axisrati**2 * xposrttr**2 + yposrttr**2)
-        
-        deflxposrttr = bein * axisrati / facteccc *  np.arctan(facteccc * xposrttr / factrcor)
-        deflyposrttr = bein * axisrati / facteccc * np.arctanh(facteccc * yposrttr / factrcor)
-        
-        # totate back vector to original basis
-        deflxpos = np.cos(angl) * deflxposrttr + np.sin(angl) * deflyposrttr
-        deflypos = -np.sin(angl) * deflxposrttr + np.cos(angl) * deflyposrttr
-   
-    defl = np.vstack((deflxpos, deflypos)).T
+    # translate the grid
+    xposgridtran = xposgrid[indxpixlelem] - dictchalinpt['xposhalo']
+    yposgridtran = yposgrid[indxpixlelem] - dictchalinpt['yposhalo']
     
-    return defl
+    anglgrid = np.sqrt(xposgridtran**2 + yposgridtran**2)
+    
+    # rotate the grid
+    xposgridrttr = np.cos(anglgrid) * xposgridtran - np.sin(anglgrid) * yposgridtran
+    yposgridrttr = np.sin(anglgrid) * xposgridtran + np.cos(anglgrid) * yposgridtran
+    
+    axisrati = 1. - dictchalinpt['ellphalo']
+    facteccc = np.sqrt(1. - axisrati**2)
+    factrcor = np.sqrt(axisrati**2 * xposgridrttr**2 + yposgridrttr**2)
+    
+    deflxposrttr = dictchalinpt['beinhalo'] * axisrati / facteccc *  np.arctan(facteccc * xposgridrttr / factrcor)
+    deflyposrttr = dictchalinpt['beinhalo'] * axisrati / facteccc * np.arctanh(facteccc * yposgridrttr / factrcor)
+    
+    # rotate back vector to original basis
+    dictchaloutp['deflxposhalo'] = np.cos(anglgrid) * deflxposrttr + np.sin(anglgrid) * deflyposrttr
+    dictchaloutp['deflyposhalo'] = -np.sin(anglgrid) * deflxposrttr + np.cos(anglgrid) * deflyposrttr
+   
+    dictchaloutp['deflhalo'] = np.vstack((dictchaloutp['deflxposhalo'], dictchaloutp['deflyposhalo'])).T
+    
+    if 'xpossubh' in dictchalinpt:
+        defl = retr_deflcutf(xposgrid, yposgrid, dictchalinpt)
+        dictchaloutp['deflxpossubh'] = xposgridtran / anglgrid * defl
+        dictchaloutp['deflypossubh'] = yposgridtran / anglgrid * defl
+        
+        dictchaloutp['deflhalo'] += dictchaloutp['deflsubh']
+
+    return dictchaloutp
 
 
-def retr_caustics(dictchalinpt):
-
-    pass
-
+def retr_caustics(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
+   
+    from skimage import measure
+    
+    deflmain = retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt)
+    deflsubh = retr_
+    magn = retr_magn()
+    
+    cont = measure.find_contours(magn, 0.8)
+    print('cont')
+    print(cont)
