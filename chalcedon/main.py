@@ -132,43 +132,9 @@ def retr_deflextr(xposgrid, yposgrid, sher, sang):
     return deflextr
 
 
-def retr_deflcutf(xposgrid, yposgrid, dictchalinpt, boolasym=False):
-    '''
-    Return deflection due to a subhalo with a cutoff radius
-    '''
-    
-    distxpos = xposgrid[:, None] - dictchalinpt['xpossubh'][None, :]
-    distypos = yposgrid[:, None] - dictchalinpt['ypossubh'][None, :]
-    
-    distangl = np.sqrt(distxpos**2 + distypos**2)
-    
-    fracanglasca = distangl / dictchalinpt['ascasubh']
-    
-    deflcutf = defs / fracanglasca
-    
-    # second term in the NFW deflection profile
-    fact = np.ones_like(fracanglasca)
-    indxlowr = np.where(fracanglasca < 1.)[0]
-    indxuppr = np.where(fracanglasca > 1.)[0]
-    fact[indxlowr] = np.arccosh(1. / fracanglasca[indxlowr]) / np.sqrt(1. - fracanglasca[indxlowr]**2)
-    fact[indxuppr] = np.arccos(1. / fracanglasca[indxuppr]) / np.sqrt(fracanglasca[indxuppr]**2 - 1.)
-    
-    if boolasym:
-        deflcutf *= np.log(fracanglasca / 2.) + fact
-    else:
-        fracacutasca = acut / asca
-        factcutf = fracacutasca**2 / (fracacutasca**2 + 1)**2 * ((fracacutasca**2 + 1. + 2. * (fracanglasca**2 - 1.)) * fact + \
-                np.pi * fracacutasca + (fracacutasca**2 - 1.) * np.log(fracacutasca) + \
-                np.sqrt(fracanglasca**2 + fracacutasca**2) * (-np.pi + (fracacutasca**2 - 1.) / fracacutasca * \
-                np.log(fracanglasca / (np.sqrt(fracanglasca**2 + fracacutasca**2) + fracacutasca))))
-        deflcutf *= factcutf
-       
-    return deflcutf
-
-
 def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
     '''
-    Return deflection due to a main halo without a cutoff radius and subhalos with cutoff
+    Return deflection due to a main halo without a cutoff radius and subhalos with cutoff radii
     '''
     
     dictchaloutp = dict()
@@ -176,36 +142,87 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
     # check inputs
     if dictchalinpt['ellphalo'] is not None and (dictchalinpt['ellphalo'] < 0. or dictchalinpt['ellphalo'] > 1.):
         raise Exception('')
-
-    # translate the grid
-    xposgridtran = xposgrid[indxpixlelem] - dictchalinpt['xposhalo']
-    yposgridtran = yposgrid[indxpixlelem] - dictchalinpt['yposhalo']
     
-    anglgrid = np.sqrt(xposgridtran**2 + yposgridtran**2)
-    
-    # rotate the grid
-    xposgridrttr = np.cos(anglgrid) * xposgridtran - np.sin(anglgrid) * yposgridtran
-    yposgridrttr = np.sin(anglgrid) * xposgridtran + np.cos(anglgrid) * yposgridtran
-    
-    axisrati = 1. - dictchalinpt['ellphalo']
-    facteccc = np.sqrt(1. - axisrati**2)
-    factrcor = np.sqrt(axisrati**2 * xposgridrttr**2 + yposgridrttr**2)
-    
-    deflxposrttr = dictchalinpt['beinhalo'] * axisrati / facteccc *  np.arctan(facteccc * xposgridrttr / factrcor)
-    deflyposrttr = dictchalinpt['beinhalo'] * axisrati / facteccc * np.arctanh(facteccc * yposgridrttr / factrcor)
-    
-    # rotate back vector to original basis
-    dictchaloutp['deflxposhalo'] = np.cos(anglgrid) * deflxposrttr + np.sin(anglgrid) * deflyposrttr
-    dictchaloutp['deflyposhalo'] = -np.sin(anglgrid) * deflxposrttr + np.cos(anglgrid) * deflyposrttr
-   
-    dictchaloutp['deflhalo'] = np.vstack((dictchaloutp['deflxposhalo'], dictchaloutp['deflyposhalo'])).T
-    
+    numbiter = 1
     if 'xpossubh' in dictchalinpt:
-        defl = retr_deflcutf(xposgrid, yposgrid, dictchalinpt)
-        dictchaloutp['deflxpossubh'] = xposgridtran / anglgrid * defl
-        dictchaloutp['deflypossubh'] = yposgridtran / anglgrid * defl
+        numbsubh = dictchalinpt['xpossubh'].size
+        numbiter += numbsubh
+    
+    print('temp: find out boolasym')
+    dictchalinpt['boolasym'] = True
+    
+    indxiter = np.arange(numbiter)
+    for u in indxiter:
         
-        dictchaloutp['deflhalo'] += dictchaloutp['deflsubh']
+        if u == 0:
+            strgcomp = 'halo'
+        else:
+            k = u - 1
+            strgcomp = 'subh%08d' % k
+        
+        # dictionary of parameter names for the component
+        dictstrg = dict()
+        for name in ['xpos', 'ypos', 'ellp', 'bein', 'deflxpos', 'deflypos']:
+            dictstrg[name] = name + strgcomp
+
+        # translate the grid
+        ## horizontal distance to the component [arcsec]
+        xposgridtran = xposgrid[indxpixlelem] - dictchalinpt[dictstrg['xpos']]
+        ## vertical distance to the component [arcsec]
+        yposgridtran = yposgrid[indxpixlelem] - dictchalinpt[dictstrg['ypos']]
+        
+        anglgrid = np.sqrt(xposgridtran**2 + yposgridtran**2)
+        
+        # rotate the grid
+        xposgridrttr = np.cos(anglgrid) * xposgridtran - np.sin(anglgrid) * yposgridtran
+        yposgridrttr = np.sin(anglgrid) * xposgridtran + np.cos(anglgrid) * yposgridtran
+        
+        # main halo
+        if u == 0:
+            axisrati = 1. - dictchalinpt[dictstrg['ellp']]
+            facteccc = np.sqrt(1. - axisrati**2)
+            factrcor = np.sqrt(axisrati**2 * xposgridrttr**2 + yposgridrttr**2)
+            
+            deflxposrttr = dictchalinpt[dictstrg['bein']] * axisrati / facteccc *  np.arctan(facteccc * xposgridrttr / factrcor)
+            deflyposrttr = dictchalinpt[dictstrg['bein']] * axisrati / facteccc * np.arctanh(facteccc * yposgridrttr / factrcor)
+        
+        # subhalos
+        else:
+            # component-centric radius [arcsec]
+            radigrid = np.sqrt(xposgridtran**2 + yposgridtran**2)
+        
+            fracanglasca = radigrid / dictchalinpt['ascasubh'][k]
+            
+            # second term in the NFW deflection profile
+            fact = np.ones_like(fracanglasca)
+            indxlowr = np.where(fracanglasca < 1.)[0]
+            indxuppr = np.where(fracanglasca > 1.)[0]
+            fact[indxlowr] = np.arccosh(1. / fracanglasca[indxlowr]) / np.sqrt(1. - fracanglasca[indxlowr]**2)
+            fact[indxuppr] = np.arccos(1. / fracanglasca[indxuppr]) / np.sqrt(fracanglasca[indxuppr]**2 - 1.)
+            
+            if dictchalinpt['boolasym']:
+                factcutf = np.log(fracanglasca / 2.) + fact
+            else:
+                fracacutasca = acut / asca
+                factcutf = fracacutasca**2 / (fracacutasca**2 + 1)**2 * ((fracacutasca**2 + 1. + 2. * (fracanglasca**2 - 1.)) * fact + \
+                        np.pi * fracacutasca + (fracacutasca**2 - 1.) * np.log(fracacutasca) + \
+                        np.sqrt(fracanglasca**2 + fracacutasca**2) * (-np.pi + (fracacutasca**2 - 1.) / fracacutasca * \
+                        np.log(fracanglasca / (np.sqrt(fracanglasca**2 + fracacutasca**2) + fracacutasca))))
+            
+            deflxposrttr = factcutf * fact * xposgridtran
+            deflyposrttr = factcutf * fact * yposgridtran
+
+        # rotate back vector to original basis
+        dictchaloutp['deflxposhalo'] = np.cos(anglgrid) * deflxposrttr + np.sin(anglgrid) * deflyposrttr
+        dictchaloutp['deflyposhalo'] = -np.sin(anglgrid) * deflxposrttr + np.cos(anglgrid) * deflyposrttr
+   
+        dictchaloutp['deflhalo'] = np.vstack((dictchaloutp['deflxposhalo'], dictchaloutp['deflyposhalo'])).T
+        
+        if numbiter > 1 and u == 0:
+            dictchaloutp['defltotl'] = np.copy(dictchaloutp['deflhalo'])
+        else:
+            dictchaloutp['defltotl'] += dictchaloutp['deflsubh'][k]
+        
 
     return dictchaloutp
 
