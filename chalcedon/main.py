@@ -138,6 +138,9 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
     '''
     
     dictchaloutp = dict()
+    
+    if not 'ellphalo' in dictchalinpt:
+        dictchalinpt['ellphalo'] = 0.
 
     # check inputs
     if dictchalinpt['ellphalo'] is not None and (dictchalinpt['ellphalo'] < 0. or dictchalinpt['ellphalo'] > 1.):
@@ -155,7 +158,7 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
     for u in indxiter:
         
         if u == 0:
-            strgcomp = 'halo'
+            strgcomp = 'host'
         else:
             k = u - 1
             strgcomp = 'subh%08d' % k
@@ -213,10 +216,10 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
             deflyposrttr = factcutf * fact * yposgridtran
 
         # rotate back vector to original basis
-        dictchaloutp['deflxposhalo'] = np.cos(anglgrid) * deflxposrttr + np.sin(anglgrid) * deflyposrttr
-        dictchaloutp['deflyposhalo'] = -np.sin(anglgrid) * deflxposrttr + np.cos(anglgrid) * deflyposrttr
+        dictchaloutp['deflxposhost'] = np.cos(anglgrid) * deflxposrttr + np.sin(anglgrid) * deflyposrttr
+        dictchaloutp['deflyposhost'] = -np.sin(anglgrid) * deflxposrttr + np.cos(anglgrid) * deflyposrttr
    
-        dictchaloutp['deflhalo'] = np.vstack((dictchaloutp['deflxposhalo'], dictchaloutp['deflyposhalo'])).T
+        dictchaloutp['deflhalo'] = np.vstack((dictchaloutp['deflxposhost'], dictchaloutp['deflyposhost'])).T
         
         if numbiter > 1 and u == 0:
             dictchaloutp['defltotl'] = np.copy(dictchaloutp['deflhalo'])
