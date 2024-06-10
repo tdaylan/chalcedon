@@ -139,11 +139,11 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
     
     dictchaloutp = dict()
     
-    if not 'ellphalo' in dictchalinpt:
-        dictchalinpt['ellphalo'] = 0.
+    if not 'ellphost' in dictchalinpt:
+        dictchalinpt['ellphost'] = 0.
 
     # check inputs
-    if dictchalinpt['ellphalo'] is not None and (dictchalinpt['ellphalo'] < 0. or dictchalinpt['ellphalo'] > 1.):
+    if dictchalinpt['ellphost'] is not None and (dictchalinpt['ellphost'] < 0. or dictchalinpt['ellphost'] > 1.):
         raise Exception('')
     
     numbiter = 1
@@ -219,10 +219,10 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
         dictchaloutp['deflxposhost'] = np.cos(anglgrid) * deflxposrttr + np.sin(anglgrid) * deflyposrttr
         dictchaloutp['deflyposhost'] = -np.sin(anglgrid) * deflxposrttr + np.cos(anglgrid) * deflyposrttr
    
-        dictchaloutp['deflhalo'] = np.vstack((dictchaloutp['deflxposhost'], dictchaloutp['deflyposhost'])).T
+        dictchaloutp['deflhost'] = np.vstack((dictchaloutp['deflxposhost'], dictchaloutp['deflyposhost'])).T
         
         if numbiter > 1 and u == 0:
-            dictchaloutp['defltotl'] = np.copy(dictchaloutp['deflhalo'])
+            dictchaloutp['defltotl'] = np.copy(dictchaloutp['deflhost'])
         else:
             dictchaloutp['defltotl'] += dictchaloutp['deflsubh'][k]
         
@@ -234,8 +234,7 @@ def retr_caustics(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
    
     from skimage import measure
     
-    deflmain = retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt)
-    deflsubh = retr_
+    dictchaloutp = retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt)
     magn = retr_magn()
     
     cont = measure.find_contours(magn, 0.8)
