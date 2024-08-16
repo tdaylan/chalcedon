@@ -5,6 +5,8 @@ import skimage
 import tdpy
 import aspendos
 
+from tdpy import summgene
+
 
 def retr_radieins_inft( \
                        # velocity dispersion [km/s]
@@ -159,20 +161,39 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
         
         if u == 0:
             strgcomp = 'host'
+        
+            xposlens = dictchalinpt['xposhost']
+            yposlens = dictchalinpt['yposhost']
+            defllens = dictchalinpt['yposhost']
         else:
             k = u - 1
             strgcomp = 'subh%08d' % k
-        
+            
+            xposlens = dictchalinpt['xpossubh'][k]
+            yposlens = dictchalinpt['ypossubh'][k]
+            defllens = dictchalinpt['ypossubh'][k]
+            
+            print('xposlens')
+            summgene(xposlens)
+            print('yposlens')
+            summgene(yposlens)
+            print('defllens')
+            summgene(defllens)
+
         # dictionary of parameter names for the component
         dictstrg = dict()
         for name in ['xpos', 'ypos', 'ellp', 'bein', 'deflxpos', 'deflypos']:
             dictstrg[name] = name + strgcomp
+        
 
+        print('dictchalinpt')
+        print(dictchalinpt.keys())
+        
         # translate the grid
         ## horizontal distance to the component [arcsec]
-        xposgridtran = xposgrid[indxpixlelem] - dictchalinpt[dictstrg['xpos']]
+        xposgridtran = xposgrid[indxpixlelem] - xposlens
         ## vertical distance to the component [arcsec]
-        yposgridtran = yposgrid[indxpixlelem] - dictchalinpt[dictstrg['ypos']]
+        yposgridtran = yposgrid[indxpixlelem] - yposlens
         
         anglgrid = np.sqrt(xposgridtran**2 + yposgridtran**2)
         
@@ -224,7 +245,7 @@ def retr_defl(xposgrid, yposgrid, indxpixlelem, dictchalinpt):
         if numbiter > 1 and u == 0:
             dictchaloutp['defltotl'] = np.copy(dictchaloutp['deflhost'])
         else:
-            dictchaloutp['defltotl'] += dictchaloutp['deflsubh'][k]
+            dictchaloutp['defltotl'] += defllens
         
 
     return dictchaloutp
