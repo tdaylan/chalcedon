@@ -43,16 +43,6 @@ def retr_angleinscosm(masslens, distlenssour, distlens, distsour):
     return angleins
 
 
-def retr_radieinstinft(dispvelo):
-    '''
-    Return Einstein radius for a source at infinity
-    '''
-    
-    radieinstinft = 4 * np.pi * (dispvelo / 3e5)**2 / np.pi * 180. * 3600. # [arcsec]
-    
-    return radieinstinft
-
-
 def retr_amplslen( \
                   # orbital period [days]
                   peri, \
@@ -64,20 +54,29 @@ def retr_amplslen( \
                   massstar, \
                  ):
     '''
-    Calculate the self-lensing amplitude.
+    Calculate the self-lensing amplitude in ppt.
     '''
     
+    # Equation 5 in Masuda Hotokezaka 2019
     amplslen = 7.15e-5 * radistar**(-2.) * peri**(2. / 3.) * masscomp * (masscomp + massstar)**(1. / 3.) * 1e3 # [ppt]
 
     return amplslen
 
 
-def retr_radieinssbin(masslens, distlenssour):
+def retr_radieinssbin( \
+                  # orbital period [days]
+                  peri, \
+                  # mass of the companion [Solar mass]
+                  masscomp, \
+                  # mass of the star [Solar mass]
+                  massstar, \
+                 ):
     '''
     Return Einstein radius for a stellar lens and source in proximity.
     '''
     
-    radieins = 0.04273 * np.sqrt(masslens * distlenssour) # [R_S]
+    # Equation 6 in Masuda Hotokezaka 2019
+    radieins = 0.04273 * (peri / 365.25)** (1. / 3.) * masscomp**(1. / 2.) * (masscomp + massstar)**(1. / 6.) # [R_S]
     
     return radieins
 
